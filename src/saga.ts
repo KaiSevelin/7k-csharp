@@ -43,7 +43,7 @@ import type {
   Terminal,
   TypeIr,
 } from "@sevenk/core";
-import type { Loss } from "@sevenk/generate";
+import type { Loss } from "@sevenk/provider";
 import { csharpType, namespaceOf, pascal, type TypeContext, type TypeProblem } from "./types.js";
 
 export interface Machine {

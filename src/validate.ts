@@ -26,7 +26,7 @@ import {
   type Predicate,
   type TypeIr,
 } from "@sevenk/core";
-import type { Loss } from "@sevenk/generate";
+import type { Loss } from "@sevenk/provider";
 import { comparisonOf } from "./equality.js";
 import { pascal, qualifiedName, type TypeContext } from "./types.js";
 

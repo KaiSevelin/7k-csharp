@@ -2,7 +2,7 @@
  * A C# provider for 7K.
  *
  * Its own repository, because D48 puts implementations outside the language: 7K states what the system
- * must do, and this says whether C# can. It reads the IR through `@sevenk/generate` and owns every
+ * must do, and this says whether C# can. It reads the IR through `@sevenk/core` and owns every
  * decision about what the code looks like.
  *
  * **There is more than one good way to write a message in C#**, so the shape is an option rather than a
@@ -44,7 +44,7 @@ import type {
   Provider,
   Refusal,
   Request,
-} from "@sevenk/generate";
+} from "@sevenk/provider";
 import { fieldType, namespaceOf, pascal, type TypeContext, type TypeProblem } from "./types.js";
 import { EQUALITY_SUPPORT, comparisonOf, equalityFor, valueEqualityFor } from "./equality.js";
 import {

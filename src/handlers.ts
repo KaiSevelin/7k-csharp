@@ -25,7 +25,7 @@
  */
 
 import type { Decl, EmitIr, LinkedModel, Predicate, ReactIr, Ref, ServiceIr } from "@sevenk/core";
-import type { Loss } from "@sevenk/generate";
+import type { Loss } from "@sevenk/provider";
 import { namespaceOf, pascal, type TypeContext } from "./types.js";
 import { describePredicate } from "./validate.js";
 
