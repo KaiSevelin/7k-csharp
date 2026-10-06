@@ -666,6 +666,12 @@ export const csharp: Provider = {
   name: "csharp",
   target: "C# 12 / .NET 8",
   layouts: ["per-declaration", "per-package", "single"],
+  /**
+   * All three layers' worth of declarations, which is what a general-purpose language gets: the
+   * Contract layer as types, a `service` as an interface, a `saga` as a state machine. Not `pipe` —
+   * what a pipe guarantees is infrastructure, and C# is not where it is configured.
+   */
+  emits: ["enum", "value", "record", "envelope", "message", "saga", "service"],
   options: OPTIONS,
 
   generate(request: Request): Generated {
