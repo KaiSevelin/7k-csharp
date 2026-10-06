@@ -1,0 +1,20 @@
+{
+  "saga": "verify.flow.Handover",
+  "note": "The first step refuses, so nothing completed and nothing is reversed \u2014 the asymmetry a saga test exists for.",
+  "start": {
+    "type": "verify.flow.Submit",
+    "body": {
+      "ref": "55555555-5555-5555-5555-555555555555",
+      "amount": "9.00",
+      "currency": "SE"
+    }
+  },
+  "inputs": [
+    {
+      "deliver": "verify.flow.Declined",
+      "body": {
+        "ref": "55555555-5555-5555-5555-555555555555"
+      }
+    }
+  ]
+}

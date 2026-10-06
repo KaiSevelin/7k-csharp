@@ -1,0 +1,30 @@
+{
+  "saga": "verify.flow.Handover",
+  "note": "The first step succeeds, the second never replies, and the saga's deadline abandons it from outside any step.",
+  "start": {
+    "type": "verify.flow.Submit",
+    "body": {
+      "ref": "77777777-7777-7777-7777-777777777777",
+      "amount": "15.00",
+      "currency": "SE"
+    }
+  },
+  "inputs": [
+    {
+      "deliver": "verify.flow.Approved",
+      "body": {
+        "ref": "77777777-7777-7777-7777-777777777777",
+        "authId": "88888888-8888-8888-8888-888888888888"
+      }
+    },
+    {
+      "deliver": "verify.flow.Noted",
+      "body": {
+        "ref": "77777777-7777-7777-7777-777777777777"
+      }
+    },
+    {
+      "advance": 400000
+    }
+  ]
+}

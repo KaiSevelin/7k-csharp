@@ -1,0 +1,90 @@
+// A saga with a `parallel` block, which the sequential one cannot exercise.
+//
+// Two branches sent together, joining when both complete. Here the stage is the unit: `collect`
+// advances only when `left` and `right` have both replied, in whichever order they do — and a
+// rejection in either ends the stage without waiting for the other.
+
+package verify.fanout
+
+import verify.common
+
+envelopes common.Trace
+
+message Gather v1.0 @command {
+  ref: uuid @role(businessKey)
+}
+
+message AskLeft  v1.0 @command { ref: uuid @role(businessKey) }
+message AskRight v1.0 @command { ref: uuid @role(businessKey) }
+
+message LeftSaid   v1.0 @event { ref: uuid @role(businessKey); value: common.Line60 }
+message RightSaid  v1.0 @event { ref: uuid @role(businessKey); value: common.Line60 }
+message RightEmpty v1.0 @event { ref: uuid @role(businessKey) }
+
+message DropLeft v1.0 @command { ref: uuid @role(businessKey); value: common.Line60 }
+
+message Finish v1.0 @command { ref: uuid @role(businessKey) }
+message Done   v1.0 @event   { ref: uuid @role(businessKey) }
+message Gave   v1.0 @event   { ref: uuid @role(businessKey) }
+message Gaveup v1.0 @event   { ref: uuid @role(businessKey); detail: common.Line60 }
+
+pipe work : queue {
+  delivery at-least-once
+}
+
+service Collector {
+  emits AskLeft  to work
+  emits AskRight to work
+  emits DropLeft to work
+  emits Finish   to work
+  emits Gave     to work
+  emits Gaveup   to work
+
+  reacts Gather from work {
+    replies none
+  }
+}
+
+saga Fanout v1.0 {
+
+  start on Gather keyed by ref
+
+  state {
+    left:  common.Line60
+    right: common.Line60
+  }
+
+  // One stage, two branches. Both are sent before either reply can be delivered, and the saga
+  // advances only when both have joined.
+  parallel {
+    step left {
+      send AskLeft
+
+      on LeftSaid { left = message.value }
+      on timeout 20s reject "left timed out"
+
+      undo with DropLeft { value = state.left }
+    }
+
+    step right {
+      send AskRight
+
+      on RightSaid { right = message.value }
+      on RightEmpty  reject "right had nothing"
+      on timeout 30s reject "right timed out"
+    }
+  }
+
+  step settle {
+    send Finish
+
+    on Done
+    on timeout 1m reject "settle timed out"
+  }
+
+  on deadline 10m abandon
+
+  on complete send Gave
+  on reject   send Gaveup { detail = terminal.reason }
+  on abandon  send Gaveup { detail = terminal.reason }
+}

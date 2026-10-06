@@ -1,0 +1,32 @@
+{
+  "saga": "verify.fanout.Fanout",
+  "note": "The same two replies in the other order. A stage joins on all of its branches, so the trace differs only in which advanced first.",
+  "start": {
+    "type": "verify.fanout.Gather",
+    "body": {
+      "ref": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+    }
+  },
+  "inputs": [
+    {
+      "deliver": "verify.fanout.RightSaid",
+      "body": {
+        "ref": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+        "value": "right"
+      }
+    },
+    {
+      "deliver": "verify.fanout.LeftSaid",
+      "body": {
+        "ref": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+        "value": "left"
+      }
+    },
+    {
+      "deliver": "verify.fanout.Done",
+      "body": {
+        "ref": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+      }
+    }
+  ]
+}

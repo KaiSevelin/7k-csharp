@@ -1,0 +1,32 @@
+{
+  "saga": "verify.fanout.Fanout",
+  "note": "Both branches reply, so the stage joins and the saga moves on. The second reply is what advances it.",
+  "start": {
+    "type": "verify.fanout.Gather",
+    "body": {
+      "ref": "dddddddd-dddd-dddd-dddd-dddddddddddd"
+    }
+  },
+  "inputs": [
+    {
+      "deliver": "verify.fanout.LeftSaid",
+      "body": {
+        "ref": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+        "value": "left"
+      }
+    },
+    {
+      "deliver": "verify.fanout.RightSaid",
+      "body": {
+        "ref": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+        "value": "right"
+      }
+    },
+    {
+      "deliver": "verify.fanout.Done",
+      "body": {
+        "ref": "dddddddd-dddd-dddd-dddd-dddddddddddd"
+      }
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+// A model for `npm run verify`: every data construct this provider claims to generate, in a shape the
+// real C# compiler can be pointed at. It is deliberately not pretty — it exists to be awkward.
+
+package verify.common
+
+label pii
+
+enum Status {
+  Open
+  Shipped
+  Cancelled
+}
+
+value Line     : string { length 1..255; normalize trim }
+value Line60   : Line   { length 1..60 }
+value Code     : string { length 2; pattern /^[A-Z]{2}$/; example "SE" }
+value Qty      : int    { range 1..99 }
+value Weight   : float
+value Money18  : decimal(18,2) { range 0.. }
+value Tag      : string { normalize upper }
+value Ratio    : decimal(9,4) { range 0..1 }
+
+// A nominal value over a collection, whose wrapper struct would otherwise compare by reference.
+value Payload  : bytes { length 1..64 }
+
+record Amount {
+  value:    Money18
+  currency: Code
+}
+
+record Named {
+  name: Line60
+}
+
+// `include` splices, so this carries `name` and the rules that come with it.
+record Spread {
+  include Named
+  extra: Line60?
+}
+
+// Nothing to check, here or below.
+record Plain {
+  note: string
+}
+
+@pii record Person {
+  email:  Line
+  region: Code?
+  token:  Payload?
+}
+
+envelope Trace {
+  correlationId: uuid @role(correlation)
+  priority:      int  { range 0..9 }
+}

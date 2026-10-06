@@ -1,0 +1,192 @@
+// Services, so that `npm run verify` checks a generated interface can actually be implemented.
+//
+// Deliberately awkward: a multi-reply subscription, a named second subscription to the same pipe, a
+// filter with a `<` in it (which is XML in a doc comment and must be escaped), an at-most-once pipe,
+// and emits that are nobody's reply so the outbound port has something to carry.
+
+package verify.flow
+
+import verify.common
+
+envelopes common.Trace
+
+message Submit v1.0 @command {
+  ref:      uuid @role(businessKey)
+  amount:   common.Money18
+  currency: common.Code
+}
+
+message Accepted v1.0 @event {
+  ref: uuid @role(businessKey)
+}
+
+message Refused v1.0 @event {
+  ref:    uuid @role(businessKey)
+  reason: common.Line60
+}
+
+message Withdraw v1.0 @command {
+  ref: uuid @role(businessKey)
+}
+
+message Recorded v1.0 @event @internal(verify) {
+  ref: uuid @role(businessKey)
+}
+
+message Noted v1.0 @event {
+  ref: uuid @role(businessKey)
+}
+
+// The saga's own vocabulary. Two steps, so that compensation has something to reverse and
+// something to leave alone.
+
+message Approved v1.0 @event {
+  ref:    uuid @role(businessKey)
+  authId: uuid
+}
+
+message Declined v1.0 @event {
+  ref: uuid @role(businessKey)
+}
+
+message Notify v1.0 @command {
+  ref: uuid @role(businessKey)
+}
+
+message Authorize v1.0 @command {
+  ref:    uuid @role(businessKey)
+  amount: common.Money18
+}
+
+message Reverse v1.0 @command {
+  ref:    uuid @role(businessKey)
+  authId: uuid
+  amount: common.Money18
+}
+
+message Ship v1.0 @command {
+  ref:      uuid @role(businessKey)
+  amount:   common.Money18
+  currency: common.Code
+}
+
+message Shipped v1.0 @event {
+  ref: uuid @role(businessKey)
+}
+
+message Unshippable v1.0 @event {
+  ref: uuid @role(businessKey)
+}
+
+message Settled v1.0 @event {
+  ref: uuid @role(businessKey)
+}
+
+message Unsettled v1.0 @event {
+  ref:    uuid @role(businessKey)
+  detail: common.Line60
+}
+
+pipe commands : queue {
+  delivery    at-least-once
+  ordering by ref
+  retention   7d
+}
+
+pipe events : topic {
+  delivery at-least-once
+}
+
+pipe telemetry : topic {
+  delivery at-most-once
+  dlq      none
+}
+
+service Desk {
+  emits Accepted to events
+  emits Notify    to commands
+  emits Authorize to commands
+  emits Reverse   to commands
+  emits Ship      to commands
+  emits Settled   to events
+  emits Unsettled to events
+  emits Refused  to events
+  emits Recorded to events
+  emits Noted    to telemetry
+
+  reacts Submit from commands {
+    requires claim.scope contains "desk.write"
+    replies  Accepted | Refused
+    retry    5 after 1s max 30s
+  }
+
+  reacts Withdraw from commands {
+    once per none
+    replies  none
+  }
+
+  // A second, independent subscription to the same pipe, filtered.
+  reacts Withdraw from commands as sweep {
+    where       envelope.priority < 5
+    replies     none
+    concurrency 1
+    retry       0
+  }
+}
+
+// The saga.
+//
+// Three sequential steps, chosen so that compensation has all three of its cases in one trace:
+// `authorize` reverses with a message, `notify` declares `undo none` and so stays done, and
+// `deliver` is last and has nothing after it to reverse. A rejection in `deliver` therefore
+// produces an `irreversible` and a `compensating`, in reverse completion order — and a rejection in
+// `authorize` produces neither, which is the asymmetry a saga test exists to check.
+saga Handover v1.0 {
+
+  start on Submit keyed by ref {
+    amount   = message.amount
+    currency = message.currency
+  }
+
+  state {
+    amount:   common.Money18
+    currency: common.Code
+    authId:   uuid
+  }
+
+  step authorize {
+    // `ref` is the instance key and fills itself; `amount` matches a state field by name.
+    send Authorize
+
+    on Approved { authId = message.authId }
+    on Declined    reject "declined"
+    on timeout 30s reject "authorization timed out"
+
+    // Needs authId, which only the saga holds and only `on Approved` recorded.
+    undo with Reverse { authId = state.authId; amount = state.amount }
+  }
+
+  step notify {
+    send Notify
+
+    on Noted
+    on timeout 10s reject "notification timed out"
+
+    // Sent to a person. There is no unsending it, and saying so is better than pretending.
+    undo none
+  }
+
+  step deliver {
+    send Ship
+
+    on Shipped
+    on Unshippable reject "cannot ship"
+    on timeout 2m  reject "delivery timed out"
+  }
+
+  on deadline 5m abandon
+
+  on complete send Settled
+  on reject   send Unsettled { detail = terminal.reason }
+  on abandon  send Unsettled { detail = terminal.reason }
+}

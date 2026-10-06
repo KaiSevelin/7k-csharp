@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+*.log
+
+# Where `npm run verify` builds the generated C#.
+.verify/
+obj/
+bin/

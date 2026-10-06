@@ -1,0 +1,36 @@
+{
+  "saga": "verify.fanout.Fanout",
+  "note": "Both branches join and the stage advances, then a timer a joined branch had armed fires late because this host cannot cancel timers. The guard, not the cancellation, is what has to make it harmless.",
+  "start": {
+    "type": "verify.fanout.Gather",
+    "body": {
+      "ref": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+    }
+  },
+  "inputs": [
+    {
+      "deliver": "verify.fanout.LeftSaid",
+      "body": {
+        "ref": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        "value": "left"
+      }
+    },
+    {
+      "deliver": "verify.fanout.RightSaid",
+      "body": {
+        "ref": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        "value": "right"
+      }
+    },
+    {
+      "advance": 40000
+    },
+    {
+      "deliver": "verify.fanout.Done",
+      "body": {
+        "ref": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+      }
+    }
+  ],
+  "uncancellableTimers": true
+}

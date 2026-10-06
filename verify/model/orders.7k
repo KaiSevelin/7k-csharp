@@ -1,0 +1,44 @@
+package verify.orders
+
+import verify.common
+
+envelopes common.Trace
+
+record Item {
+  sku:    common.Line60
+  qty:    common.Qty
+  unit:   common.Amount
+  weight: common.Weight?
+}
+
+// Every kernel type, so the mapping is exercised rather than asserted.
+message Everything v1.0 @command {
+  anId:     uuid    @role(businessKey)
+  aBool:    bool
+  anInt:    int
+  aFloat:   float
+  aString:  string  { length 1..10 }
+  someBytes: bytes
+  anInstant: instant
+  aDuration: duration
+  aDate:     date
+  aDecimal:  decimal(9,2) { range 0..100 }
+  aList:     [common.Line60] { size 1..5; unique }
+  aMap:      map<common.Code, common.Amount>
+  optional:  common.Line60?
+  anEnum:    common.Status
+  nested:    common.Spread
+  plain:     common.Plain
+}
+
+message PlaceOrder v1.0 @command {
+  orderId: uuid @role(businessKey)
+  items:   [Item] { size 1..50 }
+  total:   common.Amount
+  buyer:   common.Person
+  status:  common.Status
+
+  // The rule a schema language cannot state, and the reason validators are generated at all.
+  invariant total.currency == items[].unit.currency
+  invariant status != "Cancelled"
+}

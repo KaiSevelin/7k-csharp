@@ -1,0 +1,22 @@
+{
+  "saga": "verify.fanout.Fanout",
+  "note": "One branch replies, the other never does, so its timeout fires while its sibling has already joined.",
+  "start": {
+    "type": "verify.fanout.Gather",
+    "body": {
+      "ref": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    }
+  },
+  "inputs": [
+    {
+      "deliver": "verify.fanout.LeftSaid",
+      "body": {
+        "ref": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "value": "left"
+      }
+    },
+    {
+      "advance": 31000
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "saga": "verify.flow.Handover",
+  "note": "Nothing replies, so the first step's timeout fires and rejects.",
+  "start": {
+    "type": "verify.flow.Submit",
+    "body": {
+      "ref": "66666666-6666-6666-6666-666666666666",
+      "amount": "7.00",
+      "currency": "SE"
+    }
+  },
+  "inputs": [
+    {
+      "advance": 31000
+    }
+  ]
+}

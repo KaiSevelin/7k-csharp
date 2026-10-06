@@ -1,0 +1,28 @@
+{
+  "saga": "verify.flow.Handover",
+  "note": "A reply for another instance's key, which must not advance this one.",
+  "start": {
+    "type": "verify.flow.Submit",
+    "body": {
+      "ref": "99999999-9999-9999-9999-999999999999",
+      "amount": "3.00",
+      "currency": "SE"
+    }
+  },
+  "inputs": [
+    {
+      "deliver": "verify.flow.Approved",
+      "body": {
+        "ref": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "authId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+      }
+    },
+    {
+      "deliver": "verify.flow.Approved",
+      "body": {
+        "ref": "99999999-9999-9999-9999-999999999999",
+        "authId": "cccccccc-cccc-cccc-cccc-cccccccccccc"
+      }
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "saga": "verify.flow.Handover",
+  "note": "The first step succeeds and the second refuses, so exactly one step is reversed.",
+  "start": {
+    "type": "verify.flow.Submit",
+    "body": {
+      "ref": "33333333-3333-3333-3333-333333333333",
+      "amount": "40.00",
+      "currency": "NO"
+    }
+  },
+  "inputs": [
+    {
+      "deliver": "verify.flow.Approved",
+      "body": {
+        "ref": "33333333-3333-3333-3333-333333333333",
+        "authId": "44444444-4444-4444-4444-444444444444"
+      }
+    },
+    {
+      "deliver": "verify.flow.Noted",
+      "body": {
+        "ref": "33333333-3333-3333-3333-333333333333"
+      }
+    },
+    {
+      "deliver": "verify.flow.Unshippable",
+      "body": {
+        "ref": "33333333-3333-3333-3333-333333333333"
+      }
+    }
+  ]
+}

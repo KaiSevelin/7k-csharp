@@ -1,0 +1,25 @@
+{
+  "saga": "verify.fanout.Fanout",
+  "note": "One branch replies and the other rejects, which ends the stage without waiting for anything. Only the branch that completed is reversed.",
+  "start": {
+    "type": "verify.fanout.Gather",
+    "body": {
+      "ref": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    }
+  },
+  "inputs": [
+    {
+      "deliver": "verify.fanout.LeftSaid",
+      "body": {
+        "ref": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+        "value": "left"
+      }
+    },
+    {
+      "deliver": "verify.fanout.RightEmpty",
+      "body": {
+        "ref": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+      }
+    }
+  ]
+}
