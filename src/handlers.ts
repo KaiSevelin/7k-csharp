@@ -26,6 +26,7 @@
 
 import type { Decl, EmitIr, LinkedModel, Predicate, ReactIr, Ref, ServiceIr } from "@sevenk/core";
 import type { Loss } from "@sevenk/provider";
+import { dispatcherFor, reachable, type Dispatch } from "./devhost.js";
 import { namespaceOf, pascal, type TypeContext } from "./types.js";
 import { describePredicate } from "./validate.js";
 
@@ -54,6 +55,8 @@ export interface Handlers {
   readonly needsAsync: boolean;
   /** One per `reacts`, in the order the interface declares them. */
   readonly handlers: readonly HandlerSymbol[];
+  /** The development host's dispatcher, when one was asked for. */
+  readonly devHost: readonly string[];
 }
 
 const indent = (lines: readonly string[]): string[] => lines.map((l) => (l === "" ? "" : `    ${l}`));
@@ -458,6 +461,10 @@ export function handlersFor(
   ctx: TypeContext,
   model: LinkedModel,
   asyncSuffix: boolean,
+  /** Whether to write the development host's dispatcher beside the interface. */
+  devHost = false,
+  /** Where the fixed half of the dev host lives, which is the support namespace. */
+  support = "SevenK",
 ): Handlers | undefined {
   if (decl.kind !== "service" || decl.external) return undefined;
   if (decl.reacts.length === 0 && decl.emits.length === 0) return undefined;
@@ -466,6 +473,7 @@ export function handlersFor(
   const name = `I${pascal(decl.id.name)}`;
   const members: string[] = [];
   const handlers: HandlerSymbol[] = [];
+  const dispatches: Dispatch[] = [];
   // The .NET convention for a `Task`-returning method, which plenty of codebases enforce with an
   // analyzer — and a generated file that trips one gets its whole directory excluded from analysis.
   const suffix = asyncSuffix ? "Async" : "";
@@ -491,6 +499,28 @@ export function handlersFor(
       ...envelopes.map((e) => `${absolute(e, ctx)} ${camel(e.id.name)}`),
       "CancellationToken cancellationToken",
     ];
+
+    // Collected from the same values that write the signature, so the dispatcher cannot call it
+    // with the wrong types or in the wrong order. The reply is named as the `replies` clause spells
+    // it, which is the one spelling guaranteed to resolve at the other end: it resolved when the
+    // model was linked, from the package the runtime will resolve it from.
+    dispatches.push({
+      type: `${message.id.pkg}.${message.id.name}`,
+      subscription: react.subscription,
+      isDefault: react.subscription === decl.id.name,
+      method,
+      args: [
+        `delivery.Read<${absolute(message, ctx)}>(json)`,
+        ...envelopes.map((e) => `delivery.ReadEnvelope<${absolute(e, ctx)}>(json)`),
+      ],
+      replies: (react.replies ?? [])
+        .filter((r): r is Ref => r !== "none")
+        .flatMap((ref) => {
+          const reply = model.declFor(ref);
+          return reply === undefined ? [] : [{ case: pascal(reply.id.name), reply: ref.text }];
+        }),
+      ...(replies.length > 1 ? { outcome: outcomeName } : {}),
+    });
 
     members.push(
       ...doc(
@@ -542,7 +572,27 @@ export function handlersFor(
   }
 
   if (lines.length === 0) return undefined;
-  return { lines, losses, needsAsync: true, handlers };
+  if (devHost) {
+    for (const one of reachable(dispatches).lost) {
+      losses.push({
+        construct: "reacts",
+        at: `${decl.id.name}.${one.subscription}`,
+        fidelity: "partial",
+        detail:
+          `the development host dispatches on the message, because that is what a delivery carries, ` +
+          `so this second subscription to \`${one.type}\` cannot be told from the first and is not ` +
+          "reachable from a scenario. Its handler is generated and runs in production as declared.",
+      });
+    }
+  }
+
+  return {
+    lines,
+    losses,
+    needsAsync: true,
+    handlers,
+    devHost: devHost ? dispatcherFor(pascal(decl.id.name), name, support, dispatches) : [],
+  };
 }
 
 export type { Predicate };

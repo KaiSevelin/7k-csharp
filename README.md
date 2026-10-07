@@ -36,6 +36,41 @@ Set per entry in a manifest, and overridable per declaration by a rule.
 | `validators` | boolean | `true` |
 | `validatorStyle` | `methods` \| `annotations` \| `both` | `methods` |
 | `asyncSuffix` | boolean | `true` |
+| `devHost` | boolean | `true` |
+
+### The development host
+
+`devHost` writes a dispatcher beside each service interface: hand it your implementation and the service
+runs for real inside a [7K Sandbox](https://github.com/KaiSevelin/7k-sandbox) scenario, under your
+debugger, while everything it talks to stays mocked.
+
+```csharp
+await SevenKDevHost.RunAsync(new DeskDevHost(new Desk(), Json.Options), Json.Options);
+```
+
+```ts
+const desk = await overProcess("dotnet", ["run", "--project", "./src/Desk"], { expect: "Desk" });
+await runScenario(model, file, scenario, { live: new Map([["Desk", desk]]) });
+```
+
+The sandbox's clock is virtual, so no model time passes while the engine waits for a reply: stopping on
+a breakpoint for five minutes does not trip a step's `timeout 30s`. Against a real broker the visibility
+timeout expires and the message is redelivered while you are still reading a local.
+
+**It defaults on, and is `#if DEBUG`.** The value of a dev host is being there when you reach for it
+rather than being something you remember to switch on — which is only safe if it is absent from what you
+ship, because a dev host in production is a second entry point into every handler with nothing in front
+of it. A Release build contains none of it. It is also off without `serialization`, since a frame is JSON
+and a host that cannot read a body cannot do the one thing it exists for.
+
+**The dispatcher is generated, not reflective.** Only this provider knows what it called the handler,
+what order it put the envelope parameters in, and what the outcome cases are — those names are its own
+convention applied to the model, and they move when `asyncSuffix` or `messageType` does. The protocol is
+not generated: it belongs to the sandbox, because it is that runtime's `Handler` contract serialised.
+
+**One case per message**, because a delivery carries the message and not the subscription. A service that
+subscribes to the same message twice gets both handlers and a `Loss` naming the one a scenario cannot
+reach — it is still generated and still runs in production.
 
 ## It refuses rather than weakens
 
@@ -50,10 +85,13 @@ this file describes less than the model. Executable artifacts may not.
 ## Verification
 
 Unit tests prove the generator does what its authors think. They cannot prove the output is valid C#,
-so the output is handed to the real compiler:
+so the output is handed to the real compiler — twice, at two different costs. `npm test` builds one model
+in a few seconds, across the options that change the names the generated code calls itself by.
+`npm run verify` builds thirteen layout and option combinations and then runs behavioural checks against
+them:
 
 ```
-npm test           # 161 tests, including what this provider may depend on
+npm test           # 175 tests, including a `dotnet build` of what it generates
 npm run verify     # dotnet build, warnings-as-errors, then runs behavioural checks
 npm run equivalence # the generated saga vs. 7K's reference engine, 11 scripts
 ```

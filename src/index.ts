@@ -47,6 +47,7 @@ import type {
   Request,
 } from "@sevenk/provider";
 import { fieldType, namespaceOf, pascal, type TypeContext, type TypeProblem } from "./types.js";
+import { DEV_HOST_SUPPORT } from "./devhost.js";
 import { EQUALITY_SUPPORT, comparisonOf, equalityFor, valueEqualityFor } from "./equality.js";
 import {
   JSON_SUPPORT,
@@ -94,6 +95,14 @@ const OPTIONS: readonly OptionSpec[] = [
     of: ["wrapper", "alias"],
     default: "wrapper",
     scope: "declaration",
+  },
+  {
+    name: "devHost",
+    describe:
+      "Write a development host beside each service: a dispatcher that runs your implementation inside a 7K Sandbox scenario, under your debugger, while everything it talks to stays mocked. Guarded by `#if DEBUG`, so it is there when you reach for it and absent from a Release build — a dev host in production would be a second entry point into every handler with nothing in front of it.",
+    type: "boolean",
+    default: true,
+    scope: "entry",
   },
   {
     name: "nullable",
@@ -279,6 +288,8 @@ interface Needs {
   readonly jsonSupport: boolean;
   /** Whether anything carries a DataAnnotations attribute. */
   readonly annotations: boolean;
+  /** Whether any service wrote a development host, which needs the fixed half beside `Problem`. */
+  readonly devHost: boolean;
 }
 
 const NO_NEEDS: Needs = {
@@ -291,6 +302,7 @@ const NO_NEEDS: Needs = {
   json: false,
   jsonSupport: false,
   annotations: false,
+  devHost: false,
 };
 
 const both = (a: Needs, b: Needs): Needs => ({
@@ -303,6 +315,7 @@ const both = (a: Needs, b: Needs): Needs => ({
   json: a.json || b.json,
   jsonSupport: a.jsonSupport || b.jsonSupport,
   annotations: a.annotations || b.annotations,
+  devHost: a.devHost || b.devHost,
 });
 
 function emitEnum(decl: EnumIr, json: boolean, ctx: TypeContext): string[] {
@@ -494,6 +507,7 @@ function emitDecl(
   style: "methods" | "annotations" | "both",
   asyncSuffix: boolean,
   shapeOf: (decl: Decl) => Shape,
+  devHost: boolean,
 ): Emitted | undefined {
   const base = { decl, pkg: decl.id.pkg, name: pascal(decl.id.name) };
 
@@ -590,15 +604,26 @@ function emitDecl(
     }
 
     case "service": {
-      const handlers = handlersFor(decl, ctx, ctx.model, asyncSuffix);
+      const handlers = handlersFor(decl, ctx, ctx.model, asyncSuffix, devHost, supportNamespace(ctx.root));
       return handlers === undefined
         ? undefined
         : {
             ...base,
-            lines: handlers.lines,
+            // The dispatcher goes beside the interface it dispatches to rather than in a file of its
+            // own: it is useless without it, and under `single` a second file would break the one
+            // promise that layout makes.
+            lines:
+              handlers.devHost.length === 0
+                ? handlers.lines
+                : [...handlers.lines, "", ...handlers.devHost],
             problems: [],
             losses: handlers.losses,
-            needs: { ...NO_NEEDS, async: handlers.needsAsync },
+            needs: {
+              ...NO_NEEDS,
+              async: handlers.needsAsync,
+              json: handlers.devHost.length > 0,
+              devHost: handlers.devHost.length > 0,
+            },
             handlers: handlers.handlers,
           };
     }
@@ -683,6 +708,13 @@ export const csharp: Provider = {
     const nullable = request.options["nullable"] !== false;
     const json = request.options["serialization"] !== "none";
     const asyncSuffix = request.options["asyncSuffix"] !== false;
+    // Default on: the whole value of a dev host is that it is there when you reach for it. Safe to
+    // default because it is `#if DEBUG`, so a Release build has none of it.
+    //
+    // And off without serialization, because a frame is JSON: a dev host that could not read a body
+    // would be a host that cannot do the one thing it exists for. Quietly rather than as a refusal,
+    // since this is a default nobody asked for colliding with a choice somebody did make.
+    const devHost = request.options["devHost"] !== false && json;
 
     const emitted: Emitted[] = [];
     const refusals: Refusal[] = [];
@@ -728,6 +760,7 @@ export const csharp: Provider = {
         style,
         asyncSuffix,
         shapeOf,
+        devHost,
       );
       if (one === undefined) continue;
 
@@ -828,6 +861,7 @@ function group(
     ...(emitted.some((o) => o.needs.structural)
       ? [supportFile("Equality", EQUALITY_SUPPORT)]
       : []),
+    ...(emitted.some((o) => o.needs.devHost) ? [supportFile("DevHost", DEV_HOST_SUPPORT)] : []),
     ...(emitted.some((o) => o.needs.json)
       ? [
           {

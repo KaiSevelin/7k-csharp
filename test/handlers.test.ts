@@ -388,3 +388,55 @@ describe("the file around it", () => {
     expect(run(model()).artifacts.find((a) => a.path === DESK_FILE)?.from).toEqual(["flow.desk.Desk"]);
   });
 });
+
+/**
+ * The development host.
+ *
+ * `compiles.test.ts` proves it builds, which is the part that matters most and the part a string
+ * assertion cannot reach. What is left for here is the handful of decisions a reader would want to
+ * check without reading the generator: what guards it, what it dispatches on, and how it names a reply.
+ */
+describe("the development host", () => {
+  it("is written by default, because its value is being there when you reach for it", () => {
+    expect(desk()).toContain("public sealed class DeskDevHost");
+  });
+
+  it("is guarded by `#if DEBUG`, which is what makes that default safe", () => {
+    // A dev host in production is a second entry point into every handler with nothing in front of it.
+    const text = desk();
+    const at = text.indexOf("public sealed class DeskDevHost");
+    expect(text.slice(0, at)).toContain("#if DEBUG");
+    expect(text.slice(at)).toContain("#endif");
+  });
+
+  it("dispatches on the message's qualified name, which is what the frame carries", () => {
+    expect(desk()).toContain('case "flow.desk.Submit":');
+  });
+
+  it("reads the message and its envelopes out of the delivery, in the method's own order", () => {
+    const text = desk();
+    expect(text).toContain("delivery.Read<global::Acme.Flow.Desk.Submit>(json),");
+    expect(text).toContain("delivery.ReadEnvelope<global::Acme.Flow.Common.Trace>(json),");
+  });
+
+  it("names a reply as the `replies` clause spells it", () => {
+    // Which is the one spelling guaranteed to resolve at the other end: it resolved when the model was
+    // linked, out of the package the runtime resolves it in.
+    expect(desk()).toContain('SevenKReply.Of("Accepted"');
+  });
+
+  it("returns null where the model declares no reply", () => {
+    const text = desk();
+    const at = text.indexOf('case "flow.desk.Withdraw":');
+    expect(at).toBeGreaterThan(0);
+    expect(text.slice(at, at + 400)).toContain("return null;");
+  });
+
+  it("refuses a message the service does not react to, rather than acknowledging it", () => {
+    expect(desk()).toContain("does not react to");
+  });
+
+  it("is not written when it is turned off", () => {
+    expect(fileNamed(run(model(), { devHost: false }), DESK_FILE)).not.toContain("DevHost");
+  });
+});
