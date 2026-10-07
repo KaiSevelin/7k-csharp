@@ -39,6 +39,7 @@ import {
 import type {
   Artifact,
   Generated,
+  GeneratedSymbol,
   Loss,
   OptionSpec,
   Provider,
@@ -56,7 +57,7 @@ import {
   fieldAttributes,
   valueConverter,
 } from "./json.js";
-import { escapeXml, handlersFor } from "./handlers.js";
+import { escapeXml, handlersFor, type HandlerSymbol } from "./handlers.js";
 import { SAGA_SUPPORT, machineFor } from "./saga.js";
 import {
   ANNOTATION_USINGS,
@@ -251,6 +252,8 @@ interface Emitted {
   /** What the model states that the generated code does not express. */
   readonly losses: readonly Loss[];
   readonly needs: Needs;
+  /** For a service: the handler method it named for each `reacts`. */
+  readonly handlers?: readonly HandlerSymbol[];
 }
 
 /**
@@ -596,6 +599,7 @@ function emitDecl(
             problems: [],
             losses: handlers.losses,
             needs: { ...NO_NEEDS, async: handlers.needsAsync },
+            handlers: handlers.handlers,
           };
     }
 
@@ -755,7 +759,33 @@ export const csharp: Provider = {
       emitted.push(one);
     }
 
-    return { artifacts: group(emitted, request.layout, root, nullable), refusals };
+    const artifacts = group(emitted, request.layout, root, nullable);
+
+    // Where each handler landed, so a tool can point a debugger at it without learning C#.
+    //
+    // The path is found by asking which artifact was made `from` this service, rather than by
+    // recomputing `pathFor` — under `single` or `per-package` layout the service shares a file with
+    // everything else in it, and a second guess at where it went is a second thing to keep in step.
+    const symbols: GeneratedSymbol[] = [];
+    for (const one of emitted) {
+      if (one.handlers === undefined) continue;
+      const qname = qualified(one.decl);
+      const holder = artifacts.find((a) => (a.from ?? []).includes(qname));
+      for (const handler of one.handlers) {
+        symbols.push({
+          at: handler.message,
+          on: qname,
+          kind: "handler",
+          symbol: handler.method,
+          ...(holder === undefined ? {} : { path: holder.path }),
+        });
+      }
+      if (holder !== undefined) {
+        symbols.push({ at: qname, kind: "service", symbol: pascal(one.decl.id.name), path: holder.path });
+      }
+    }
+
+    return { artifacts, refusals, symbols };
   },
 };
 

@@ -29,11 +29,31 @@ import type { Loss } from "@sevenk/provider";
 import { namespaceOf, pascal, type TypeContext } from "./types.js";
 import { describePredicate } from "./validate.js";
 
+/**
+ * Where each handler landed, for a tool that wants to point at it rather than read it.
+ *
+ * **The method name, not a fully qualified one, and that is the honest answer.** This provider writes
+ * the *interface* — `IOrderService.HandlePlaceOrderAsync` — and the class that implements it is the
+ * reader's own, with a name nothing here knows. A debugger's function breakpoint matches by name, so
+ * the method name is exactly the right granularity: it stops in whatever class implements it, which is
+ * the one the reader wrote and wants to be stopped in.
+ */
+export interface HandlerSymbol {
+  /** The message handled, qualified in the model's terms. */
+  readonly message: string;
+  /** The method, as C# spells it: `HandlePlaceOrderAsync`. */
+  readonly method: string;
+  /** The interface that declares it, for context: `IOrderService`. */
+  readonly declaredBy: string;
+}
+
 export interface Handlers {
   readonly lines: readonly string[];
   readonly losses: readonly Loss[];
   /** Whether the file needs `System.Threading` and `System.Threading.Tasks`. */
   readonly needsAsync: boolean;
+  /** One per `reacts`, in the order the interface declares them. */
+  readonly handlers: readonly HandlerSymbol[];
 }
 
 const indent = (lines: readonly string[]): string[] => lines.map((l) => (l === "" ? "" : `    ${l}`));
@@ -445,6 +465,7 @@ export function handlersFor(
   const losses: Loss[] = [];
   const name = `I${pascal(decl.id.name)}`;
   const members: string[] = [];
+  const handlers: HandlerSymbol[] = [];
   // The .NET convention for a `Task`-returning method, which plenty of codebases enforce with an
   // analyzer — and a generated file that trips one gets its whole directory excluded from analysis.
   const suffix = asyncSuffix ? "Async" : "";
@@ -455,6 +476,9 @@ export function handlersFor(
     if (message === undefined) continue;
 
     const method = methodName(react, decl, model, suffix);
+    // Recorded here, from the same call that names the method in the file, so the symbol reported and
+    // the symbol written cannot drift apart.
+    handlers.push({ message: `${message.id.pkg}.${message.id.name}`, method, declaredBy: name });
     const replies = repliesOf(react, model);
     // The outcome is named for the handler, minus the convention noise around it.
     const outcomeName = `${method.replace(/^Handle/, "").replace(/Async$/, "")}Outcome`;
@@ -518,7 +542,7 @@ export function handlersFor(
   }
 
   if (lines.length === 0) return undefined;
-  return { lines, losses, needsAsync: true };
+  return { lines, losses, needsAsync: true, handlers };
 }
 
 export type { Predicate };
