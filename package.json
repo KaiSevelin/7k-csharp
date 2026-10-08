@@ -18,7 +18,8 @@
     "typecheck": "tsc --build --force",
     "verify": "tsx scripts/verify.mjs",
     "equivalence": "tsx scripts/equivalence.mjs",
-    "validation": "tsx scripts/validation.mjs"
+    "validation": "tsx scripts/validation.mjs",
+    "devhost": "tsx scripts/devhost.mjs"
   },
   "dependencies": {
     "@sevenk/core": "file:../7K/packages/core",

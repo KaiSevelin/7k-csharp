@@ -591,7 +591,7 @@ export function handlersFor(
     losses,
     needsAsync: true,
     handlers,
-    devHost: devHost ? dispatcherFor(pascal(decl.id.name), name, support, dispatches) : [],
+    devHost: devHost ? dispatcherFor(pascal(decl.id.name), qname(decl), name, support, dispatches) : [],
   };
 }
 

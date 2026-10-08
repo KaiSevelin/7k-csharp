@@ -151,10 +151,12 @@ export const DEV_HOST_SUPPORT: readonly string[] = [
   "            }",
   "            catch (global::System.Exception failure)",
   "            {",
-  "                // Only that it failed crosses back. \"The gateway timed out\" and \"the database",
-  "                // deadlocked\" are the same observable to everything downstream, and an exception must",
-  "                // never arrive as a reply the model does not declare. The sandbox then retries it",
-  "                // under the subscription's own policy, exactly as it would an in-process handler.",
+  "                // A failure, and not a reply. D26 reads \"the gateway timed out\" and \"the database",
+  "                // deadlocked\" as the same observable *from the conversation's point of view*, so what",
+  "                // must never happen is that the cause becomes something another service can branch",
+  "                // on. The message travels as the frame's own `failed` field, which is the trace and",
+  "                // not the conversation — a debugger with no idea why is a debugger nobody uses. The",
+  "                // sandbox then retries under the subscription's own policy, as for any handler.",
   "                answer = new { id, failed = failure.Message };",
   "            }",
   "",
@@ -245,7 +247,10 @@ export function reachable(dispatches: readonly Dispatch[]): {
 }
 
 export function dispatcherFor(
+  /** The C# class name, from the declaration's own name: `Desk` becomes `DeskDevHost`. */
   service: string,
+  /** The model's name for it, qualified. What the host announces and what a runner keys by. */
+  qname: string,
   iface: string,
   support: string,
   all: readonly Dispatch[],
@@ -333,7 +338,7 @@ export function dispatcherFor(
         "// The sandbox routed this here, so it is a fault in the host rather than in the model — and",
         "// it must not be quietly acknowledged, which an ignored delivery would be.",
         `throw new global::System.InvalidOperationException(`,
-        `    $"\`${service}\` does not react to \`{delivery.Type}\`");`,
+        `    $"\`${qname}\` does not react to \`{delivery.Type}\`");`,
       ]),
     ]),
     "}",
@@ -347,7 +352,7 @@ export function dispatcherFor(
     "/// <remarks>",
     "/// <para>",
     "/// Hand it your implementation and run it: the scenario registers it under",
-    `/// <c>${service}</c> and delivers to it as it would to any live handler.`,
+    `/// <c>${qname}</c> and delivers to it as it would to any live handler.`,
     "/// </para>",
     "/// <code>",
     `/// await SevenKDevHost.RunAsync(new ${service}DevHost(new ${service}(), Json.Options), Json.Options);`,
@@ -372,7 +377,11 @@ export function dispatcherFor(
       ...indent(["this.handler = handler;", "this.json = json;"]),
       "}",
       "",
-      `public string Service => "${service}";`,
+      // Qualified, because two packages may each declare a `Desk` and a runner keying by the bare
+      // name would then run one service's code for the other's deliveries. The Node provider
+      // announces the same spelling, so one `hosts.json` can name either without knowing which
+      // language is behind it.
+      `public string Service => "${qname}";`,
       "",
       `public async global::System.Threading.Tasks.Task<${prefix}SevenKReply?> DispatchAsync(`,
       ...indent([

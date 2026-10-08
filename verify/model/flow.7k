@@ -102,6 +102,13 @@ pipe telemetry : topic {
   dlq      none
 }
 
+// Whatever sends into this system, which is not this system: a till. `@external` means 7K describes
+// it and generates nothing for it, and a scenario publishes `as` it to drive the model from its edge.
+service Till @external {
+  emits Submit   to commands
+  emits Withdraw to commands
+}
+
 service Desk {
   emits Accepted to events
   emits Notify    to commands
