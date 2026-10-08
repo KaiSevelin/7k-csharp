@@ -29,6 +29,8 @@ message Everything v1.0 @command {
   anEnum:    common.Status
   nested:    common.Spread
   plain:     common.Plain
+  // Optional, so nothing that already constructs one of these has to change.
+  everyFifth: common.Step?
 }
 
 message PlaceOrder v1.0 @command {

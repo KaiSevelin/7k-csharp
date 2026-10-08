@@ -113,16 +113,35 @@ them:
 npm test           # 183 tests, including a `dotnet build` of what it generates
 npm run verify     # dotnet build, warnings-as-errors, then runs behavioural checks
 npm run equivalence # the generated saga vs. 7K's reference engine, 11 scripts
+npm run validation  # the generated validators vs. 7K's contract runtime, 18 payloads
 ```
 
 `npm run verify` builds [verify/](verify/) with `GenerateDocumentationFile` and warnings as errors, then
 executes assertions about round-tripping, equality and validation. Most real bugs in this provider were
 found by that step and by nothing else — exhaustiveness, cross-namespace resolution, `ImmutableArray`
-not giving structural equality.
+not giving structural equality. Two more were found by `npm run validation` on its first run:
+`multipleOf` was never checked at all, and an invariant was reported beside the bad field that caused
+it.
 
 `npm run equivalence` drives the generated machine and the 7K sandbox's own saga engine from one script
 and compares their decisions. The sandbox is the reference answer, so agreeing with it is the only claim
 about a generated machine worth making.
+
+`npm run validation` does the same for the data layer: one payload, validated by 7K Core's contract
+runtime and by the generated validator, compared as a multiset of (field, rule kind). Core is the
+reference for the same reason — it is the validator the sandbox rejects a payload on receipt with, so a
+generated validator that disagrees is reporting something no runtime will produce. `Behaviour.cs` proves
+the validators do what their author thought; this proves they do what the *model* says, which is a
+different claim.
+
+Four things it deliberately does not compare, each because the difference would mean nothing: the prose
+(Core writes sentences, the generated code writes the rule as the model states it), the order (two tree
+walks), the index (`items[].sku` against `items[0].sku` — a static path has no index in it), and
+structural or type findings (a missing required property will not compile and a `Guid` cannot hold
+`"not-a-uuid"`, so C# settles those a layer earlier and better than a validator could).
+
+It also fails if the fixture stops exercising a constraint kind, which is how `multipleOf` turned out to
+be in none of it.
 
 ## What it depends on
 

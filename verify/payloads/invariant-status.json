@@ -1,0 +1,24 @@
+{
+  "type": "verify.orders.PlaceOrder",
+  "body": {
+    "orderId": "11111111-1111-1111-1111-111111111111",
+    "items": [
+      {
+        "sku": "SKU-1",
+        "qty": 1,
+        "unit": {
+          "value": "5.00",
+          "currency": "SE"
+        }
+      }
+    ],
+    "total": {
+      "value": "5.00",
+      "currency": "SE"
+    },
+    "buyer": {
+      "email": "a@b.cd"
+    },
+    "status": "Cancelled"
+  }
+}

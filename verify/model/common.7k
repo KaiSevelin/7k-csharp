@@ -20,6 +20,10 @@ value Money18  : decimal(18,2) { range 0.. }
 value Tag      : string { normalize upper }
 value Ratio    : decimal(9,4) { range 0..1 }
 
+// `multipleOf` was the one constraint kind nothing in this fixture exercised, which the validation
+// equivalence harness noticed by having nothing to compare for it.
+value Step     : int    { range 0..100; multipleOf 5 }
+
 // A nominal value over a collection, whose wrapper struct would otherwise compare by reference.
 value Payload  : bytes { length 1..64 }
 

@@ -1,0 +1,32 @@
+{
+  "type": "verify.orders.Everything",
+  "body": {
+    "anId": "22222222-2222-2222-2222-222222222222",
+    "aBool": true,
+    "anInt": 7,
+    "aFloat": 1.5,
+    "aString": "ok",
+    "someBytes": "AAEC",
+    "anInstant": "2026-01-01T00:00:00Z",
+    "aDuration": "30s",
+    "aDate": "2026-01-01",
+    "aDecimal": "10.00",
+    "aList": [
+      "one",
+      "two"
+    ],
+    "aMap": {
+      "SE": {
+        "value": "1.00",
+        "currency": "SE"
+      }
+    },
+    "anEnum": "Open",
+    "nested": {
+      "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "plain": {
+      "note": "anything"
+    }
+  }
+}

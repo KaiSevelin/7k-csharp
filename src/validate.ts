@@ -303,7 +303,12 @@ function checks(
       ? `${name} ${b.exact}`
       : `${name} ${b.low ?? ""}..${b.high ?? ""}`;
 
-  switch (constraint.name) {
+  // Lowercased, because that is what the IR carries: a constraint's name comes from the keyword, and
+  // the keywords are lowercase (`multipleof`, not `multipleOf`). A `case "multipleOf"` sat here and
+  // never matched, so every `multipleOf` in every model fell through to the loss below — which then
+  // reported, untruthfully, that this provider cannot express it. The validation equivalence harness
+  // found it on its first run, by having something to compare against.
+  switch (constraint.name.toLowerCase()) {
     case "length": {
       // `length` on a list counts elements, exactly as `size` does; on a string it counts characters.
       const of = list ? `${expr}.Count` : `${expr}.Length`;
@@ -323,7 +328,7 @@ function checks(
       return { lines: parts.length === 0 ? [] : [guard(parts.join(" || "), at, rule("range"))] };
     }
 
-    case "multipleOf": {
+    case "multipleof": {
       const by = constraint.args[0] ?? "1";
       return { lines: [guard(`${expr} % ${by} != 0`, at, `multipleOf ${by}`)] };
     }
@@ -733,6 +738,19 @@ export function validatorFor(
     }
   }
 
+  /**
+   * The invariants, and only when the fields themselves hold up.
+   *
+   * 7K Core's contract runtime does exactly this, and says why: "a rule over a value that is already
+   * the wrong shape would report a second, derived failure for one cause". The reason to match rather
+   * than to have an opinion is that Core's validator is the one a runtime uses — the sandbox rejects a
+   * payload on receipt with it — so a generated validator that reported an invariant beside a bad
+   * field would be reporting something no runtime will ever produce. The validation equivalence
+   * harness is what noticed; before it, the two had always disagreed on every payload that broke a
+   * field and an invariant at once.
+   */
+  const invariantBody: string[] = [];
+
   for (const invariant of invariantsOf(decl)) {
     const { text, why, needsLinq: linq } = condition(invariant, decl, ctx);
     if (text === undefined) {
@@ -750,7 +768,20 @@ export function validatorFor(
       continue;
     }
     needsLinq = needsLinq || linq === true;
-    body.push(guard(`!(${text})`, "", `invariant ${describePredicate(invariant)}`));
+    invariantBody.push(guard(`!(${text})`, "", `invariant ${describePredicate(invariant)}`));
+  }
+
+  if (invariantBody.length > 0) {
+    body.push(
+      "",
+      "// Only when the fields hold up: an invariant over a value that is already the wrong shape",
+      "// reports a second, derived failure for one cause. 7K's own checker does the same, and is",
+      "// what a runtime rejects a payload with.",
+      "if (problems.Count == 0)",
+      "{",
+      ...indent(invariantBody),
+      "}",
+    );
   }
 
   if (body.length === 0) return undefined;

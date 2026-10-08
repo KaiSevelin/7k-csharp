@@ -1,0 +1,32 @@
+{
+  "type": "verify.orders.PlaceOrder",
+  "body": {
+    "orderId": "11111111-1111-1111-1111-111111111111",
+    "items": [
+      {
+        "sku": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "qty": 0,
+        "unit": {
+          "value": "5.00",
+          "currency": "SE"
+        }
+      },
+      {
+        "sku": "SKU-1",
+        "qty": 1,
+        "unit": {
+          "value": "5.00",
+          "currency": "NO"
+        }
+      }
+    ],
+    "total": {
+      "value": "5.00",
+      "currency": "se"
+    },
+    "buyer": {
+      "email": "a@b.cd"
+    },
+    "status": "Open"
+  }
+}
