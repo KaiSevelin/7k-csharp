@@ -57,11 +57,30 @@ The sandbox's clock is virtual, so no model time passes while the engine waits f
 a breakpoint for five minutes does not trip a step's `timeout 30s`. Against a real broker the visibility
 timeout expires and the message is redelivered while you are still reading a local.
 
-**It defaults on, and is `#if DEBUG`.** The value of a dev host is being there when you reach for it
-rather than being something you remember to switch on — which is only safe if it is absent from what you
-ship, because a dev host in production is a second entry point into every handler with nothing in front
-of it. A Release build contains none of it. It is also off without `serialization`, since a frame is JSON
-and a host that cannot read a body cannot do the one thing it exists for.
+**It defaults on, and there are three independent ways not to have it.** The value of a dev host is
+being there when you reach for it rather than being something you remember to switch on — which is only
+safe if it is absent from what you ship, because a dev host in production is a second entry point into
+every handler with nothing in front of it.
+
+| | |
+| --- | --- |
+| the option | `"devHost": false` generates none of it |
+| the file | each dispatcher is its own `*.DevHost.cs`, so one `<Compile Remove="**/*.DevHost.cs" />` drops the lot |
+| the guard | `#if DEBUG \|\| SEVENK_DEVHOST`, so a Release build has none of it |
+
+They guard against different mistakes — a manifest nobody read, a file somebody wanted gone, a
+configuration somebody shipped. The second constant is for the case `DEBUG` cannot serve: wanting a host
+in a deployed staging build, where defining `DEBUG` to get it would also change every `Debug.Assert` and
+every `#if DEBUG` somebody else wrote.
+
+It is also off without `serialization`, since a frame is JSON and a host that cannot read a body cannot
+do the one thing it exists for.
+
+**Its own file, folded in under `single`** — the rule the support files already follow, because a layout
+that promised one file and delivered two would be a layout nobody could script against. So
+`Desk.DevHost.cs` beside `Desk.cs` under `per-declaration`, `Acme.Flow.DevHost.cs` under `per-package`,
+and inside the one file under `single`. It is `partial`, like the interface beside it, since wiring a
+handler out of a container is the obvious thing to want to add to a file the generator replaces whole.
 
 **The dispatcher is generated, not reflective.** Only this provider knows what it called the handler,
 what order it put the envelope parameters in, and what the outcome cases are — those names are its own
@@ -91,7 +110,7 @@ in a few seconds, across the options that change the names the generated code ca
 them:
 
 ```
-npm test           # 175 tests, including a `dotnet build` of what it generates
+npm test           # 183 tests, including a `dotnet build` of what it generates
 npm run verify     # dotnet build, warnings-as-errors, then runs behavioural checks
 npm run equivalence # the generated saga vs. 7K's reference engine, 11 scripts
 ```

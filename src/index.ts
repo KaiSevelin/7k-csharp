@@ -263,6 +263,8 @@ interface Emitted {
   readonly needs: Needs;
   /** For a service: the handler method it named for each `reacts`. */
   readonly handlers?: readonly HandlerSymbol[];
+  /** The development host's dispatcher, which goes in a file of its own. */
+  readonly devHost?: readonly string[];
 }
 
 /**
@@ -609,22 +611,15 @@ function emitDecl(
         ? undefined
         : {
             ...base,
-            // The dispatcher goes beside the interface it dispatches to rather than in a file of its
-            // own: it is useless without it, and under `single` a second file would break the one
-            // promise that layout makes.
-            lines:
-              handlers.devHost.length === 0
-                ? handlers.lines
-                : [...handlers.lines, "", ...handlers.devHost],
+            lines: handlers.lines,
             problems: [],
             losses: handlers.losses,
-            needs: {
-              ...NO_NEEDS,
-              async: handlers.needsAsync,
-              json: handlers.devHost.length > 0,
-              devHost: handlers.devHost.length > 0,
-            },
+            // `json` is not here: the interface needs none of it, and the dispatcher that does gets
+            // its own file with its own usings. Folding them together pulled JSON imports into a
+            // production file that had no use for them.
+            needs: { ...NO_NEEDS, async: handlers.needsAsync, devHost: handlers.devHost.length > 0 },
             handlers: handlers.handlers,
+            devHost: handlers.devHost,
           };
     }
 
@@ -803,6 +798,10 @@ export const csharp: Provider = {
     for (const one of emitted) {
       if (one.handlers === undefined) continue;
       const qname = qualified(one.decl);
+      // The *first* artifact for this declaration, which is the one holding the interface: `group`
+      // emits that before the development host, and a handler's symbol is declared in the interface.
+      // Order is load-bearing here, so a test asserts the path is the interface's file and not the
+      // dispatcher's.
       const holder = artifacts.find((a) => (a.from ?? []).includes(qname));
       for (const handler of one.handlers) {
         symbols.push({
@@ -827,6 +826,16 @@ const pathFor = (decl: Decl, layout: Request["layout"], root: string): string =>
   if (layout === "per-package") return `${namespaceOf(decl.id.pkg, root)}.cs`;
   return `${namespaceOf(decl.id.pkg, root).split(".").join("/")}/${pascal(decl.id.name)}.cs`;
 };
+
+/**
+ * Where a development host goes: beside whatever holds its interface, named for it.
+ *
+ * `.DevHost.cs` so a project file can reach every one of them with a single glob —
+ * `<Compile Remove="**\/*.DevHost.cs" />` — which is a control that does not require anybody to
+ * define a constant they do not otherwise want.
+ */
+const devHostPath = (decl: Decl, layout: Request["layout"], root: string): string =>
+  pathFor(decl, layout, root).replace(/\.cs$/, ".DevHost.cs");
 
 /**
  * Groups what was emitted into files.
@@ -877,13 +886,41 @@ function group(
       : []),
   ];
 
+  /**
+   * What a development host's file needs, which is not what the interface needs.
+   *
+   * Its own `needs` because it is its own file: the dispatcher reads JSON and the interface does not,
+   * and folding them together pulled `System.Text.Json` imports into a production file that had no
+   * use for them.
+   */
+  const hostNeeds = { ...NO_NEEDS, async: true, json: true };
+
   if (layout === "per-declaration") {
-    const files = emitted.map((one) => ({
-      path: pathFor(one.decl, layout, root),
-      content: fileOf(namespaceOf(one.pkg, root), [one.lines], nullable, one.needs, root),
-      losses: one.losses,
-      from: [qualified(one.decl)],
-    }));
+    const files = emitted.flatMap((one) => [
+      {
+        path: pathFor(one.decl, layout, root),
+        content: fileOf(namespaceOf(one.pkg, root), [one.lines], nullable, one.needs, root),
+        losses: one.losses,
+        from: [qualified(one.decl)],
+      },
+      // Its own file, for the same reasons the support files get one and two more besides: it has a
+      // different lifetime from the interface beside it, so a `.csproj` can exclude it by glob
+      // without relying on a define; and a change to the generator's dispatcher then shows up as a
+      // diff in a development file rather than as churn in a production one.
+      //
+      // Emitted *after* the interface, which is what makes the symbol lookup above find the
+      // interface's path rather than this one's.
+      ...(one.devHost === undefined || one.devHost.length === 0
+        ? []
+        : [
+            {
+              path: devHostPath(one.decl, layout, root),
+              content: fileOf(namespaceOf(one.pkg, root), [one.devHost], nullable, hostNeeds, root),
+              losses: [],
+              from: [qualified(one.decl)],
+            },
+          ]),
+    ]);
     return [...files, ...support];
   }
 
@@ -896,18 +933,41 @@ function group(
   if (layout === "per-package") {
     const files = [...byNamespace]
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([ns, ones]) => ({
-        path: `${ns}.cs`,
-        content: fileOf(
-          ns,
-          ones.map((o) => o.lines),
-          nullable,
-          ones.reduce<Needs>((acc, o) => both(acc, o.needs), NO_NEEDS),
-          root,
-        ),
-        losses: ones.flatMap((o) => o.losses),
-        from: ones.map((o) => qualified(o.decl)),
-      }));
+      .flatMap(([ns, ones]) => {
+        const hosts = ones.filter((o) => (o.devHost ?? []).length > 0);
+        return [
+          {
+            path: `${ns}.cs`,
+            content: fileOf(
+              ns,
+              ones.map((o) => o.lines),
+              nullable,
+              ones.reduce<Needs>((acc, o) => both(acc, o.needs), NO_NEEDS),
+              root,
+            ),
+            losses: ones.flatMap((o) => o.losses),
+            from: ones.map((o) => qualified(o.decl)),
+          },
+          // One per namespace, not one per service: a layout that puts a package in one file should
+          // put that package's development hosts in one file too.
+          ...(hosts.length === 0
+            ? []
+            : [
+                {
+                  path: `${ns}.DevHost.cs`,
+                  content: fileOf(
+                    ns,
+                    hosts.map((o) => o.devHost ?? []),
+                    nullable,
+                    hostNeeds,
+                    root,
+                  ),
+                  losses: [],
+                  from: hosts.map((o) => qualified(o.decl)),
+                },
+              ]),
+        ];
+      });
     return [...files, ...support];
   }
 
@@ -915,7 +975,12 @@ function group(
   const parts: string[] = [...HEADER, "", ...(nullable ? ["#nullable enable", ""] : [])];
   // One file, so the support bodies are lifted into block namespaces below and their own `using`
   // lines go with the rest. `jsonSupport` is the superset, which is why it stands for both.
-  const merged = emitted.reduce<Needs>((acc, o) => both(acc, o.needs), NO_NEEDS);
+  // A folded-in dispatcher needs JSON, and under `single` there is no separate file to carry its own
+  // usings — so they join the one set this file has.
+  const merged = emitted.reduce<Needs>(
+    (acc, o) => both(acc, (o.devHost ?? []).length > 0 ? { ...o.needs, json: true } : o.needs),
+    NO_NEEDS,
+  );
   parts.push(
     ...usingsFor({ ...merged, jsonSupport: merged.json }, root),
     "",
@@ -938,6 +1003,13 @@ function group(
       parts.push(...indent(one.lines));
       if (i < ones.length - 1) parts.push("");
     });
+    // Folded in rather than beside, which is the rule the support files already follow: a layout that
+    // promised one file and delivered two would be a layout nobody could script against. The `#if`
+    // around each dispatcher is what keeps it out of a Release build here, since there is no separate
+    // file for a project to exclude.
+    for (const one of ones.filter((o) => (o.devHost ?? []).length > 0)) {
+      parts.push("", ...indent(one.devHost ?? []));
+    }
     parts.push("}", "");
   }
 

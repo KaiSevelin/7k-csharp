@@ -396,25 +396,47 @@ describe("the file around it", () => {
  * assertion cannot reach. What is left for here is the handful of decisions a reader would want to
  * check without reading the generator: what guards it, what it dispatches on, and how it names a reply.
  */
+const HOST_FILE = "Acme/Flow/Desk/Desk.DevHost.cs";
+const deskHost = () => fileNamed(run(model()), HOST_FILE);
+
 describe("the development host", () => {
   it("is written by default, because its value is being there when you reach for it", () => {
-    expect(desk()).toContain("public sealed class DeskDevHost");
+    expect(deskHost()).toContain("public sealed partial class DeskDevHost");
   });
 
-  it("is guarded by `#if DEBUG`, which is what makes that default safe", () => {
+  it("is beside the interface rather than in it", () => {
+    // Its own file: a different lifetime from the interface, a `<Compile Remove>` glob that can drop
+    // it without anybody defining a constant, and a generator change that shows as a diff in a
+    // development file rather than churn in a production one.
+    expect(desk()).not.toContain("DevHost");
+    expect(deskHost()).toContain("DeskDevHost");
+  });
+
+  it("is `partial`, as the interface beside it is", () => {
+    // Wiring a handler out of a container is the obvious thing to want to add to a file the generator
+    // replaces wholesale.
+    expect(deskHost()).toContain("public sealed partial class DeskDevHost");
+  });
+
+  it("is guarded, which is what makes defaulting on safe", () => {
     // A dev host in production is a second entry point into every handler with nothing in front of it.
-    const text = desk();
-    const at = text.indexOf("public sealed class DeskDevHost");
-    expect(text.slice(0, at)).toContain("#if DEBUG");
-    expect(text.slice(at)).toContain("#endif");
+    const text = deskHost();
+    expect(text).toContain("#if DEBUG || SEVENK_DEVHOST");
+    expect(text).toContain("#endif");
+  });
+
+  it("takes a second constant, for the case `DEBUG` cannot serve", () => {
+    // Wanting a host in a deployed staging build: defining `DEBUG` to get it would also change every
+    // `Debug.Assert` and every `#if DEBUG` somebody else wrote.
+    expect(deskHost()).toContain("SEVENK_DEVHOST");
   });
 
   it("dispatches on the message's qualified name, which is what the frame carries", () => {
-    expect(desk()).toContain('case "flow.desk.Submit":');
+    expect(deskHost()).toContain('case "flow.desk.Submit":');
   });
 
   it("reads the message and its envelopes out of the delivery, in the method's own order", () => {
-    const text = desk();
+    const text = deskHost();
     expect(text).toContain("delivery.Read<global::Acme.Flow.Desk.Submit>(json),");
     expect(text).toContain("delivery.ReadEnvelope<global::Acme.Flow.Common.Trace>(json),");
   });
@@ -422,21 +444,36 @@ describe("the development host", () => {
   it("names a reply as the `replies` clause spells it", () => {
     // Which is the one spelling guaranteed to resolve at the other end: it resolved when the model was
     // linked, out of the package the runtime resolves it in.
-    expect(desk()).toContain('SevenKReply.Of("Accepted"');
+    expect(deskHost()).toContain('SevenKReply.Of("Accepted"');
   });
 
   it("returns null where the model declares no reply", () => {
-    const text = desk();
+    const text = deskHost();
     const at = text.indexOf('case "flow.desk.Withdraw":');
     expect(at).toBeGreaterThan(0);
     expect(text.slice(at, at + 400)).toContain("return null;");
   });
 
   it("refuses a message the service does not react to, rather than acknowledging it", () => {
-    expect(desk()).toContain("does not react to");
+    expect(deskHost()).toContain("does not react to");
   });
 
-  it("is not written when it is turned off", () => {
-    expect(fileNamed(run(model(), { devHost: false }), DESK_FILE)).not.toContain("DevHost");
+  it("leaves the interface's file free of JSON it has no use for", () => {
+    // Which folding the two together did not: the dispatcher reads JSON and the interface does not.
+    expect(desk()).not.toContain("System.Text.Json");
+  });
+
+  it("is not written at all when it is turned off", () => {
+    const out = run(model(), { devHost: false });
+    expect(out.artifacts.map((a) => a.path)).not.toContain(HOST_FILE);
+    expect(fileNamed(out, DESK_FILE)).not.toContain("DevHost");
+  });
+
+  it("says where the handler is, naming the interface's file and not its own", () => {
+    // The symbol is for a method the *interface* declares, and `group` emits that file first — which
+    // is the ordering the lookup depends on, so it is asserted rather than assumed.
+    const out = run(model());
+    const handler = out.symbols?.find((x) => x.kind === "handler" && x.symbol === "HandleSubmitAsync");
+    expect(handler?.path).toBe(DESK_FILE);
   });
 });

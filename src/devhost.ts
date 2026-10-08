@@ -16,12 +16,17 @@
  * to the sandbox. A provider that defined its own frame format would be a second definition of a thing
  * with one meaning, and the first time a second language was adapted the two would drift.
  *
- * **Why `#if DEBUG`.** The option defaults on, because the whole value of this is that it is there when
- * you reach for it rather than something you remember to switch on. That is only safe if it is absent
- * from what you ship: a dev host in production is a second entry point into every handler with no
- * authentication in front of it. `DEBUG` is defined in a Debug configuration and not in a Release one,
- * so the default is on where it helps and compiled out where it would be a liability — which is a
- * better answer than an option nobody sets.
+ * **Three independent ways to not have it, which is the point of a default being on.** The option
+ * itself turns the generation off. The dispatcher goes in its own `*.DevHost.cs` file, which a project
+ * can drop with one `<Compile Remove>` glob. And the code is guarded, so a build without the constant
+ * has none of it. They guard against different mistakes — a manifest nobody read, a file somebody
+ * wanted gone, a configuration somebody shipped — and the last one is what makes defaulting on safe at
+ * all: a dev host in production is a second entry point into every handler with nothing in front of it.
+ *
+ * The guard is `DEBUG || SEVENK_DEVHOST` rather than `DEBUG` alone. `DEBUG` is what makes it work with
+ * no setup, since it is defined in a Debug configuration and not a Release one. The second constant is
+ * for the case `DEBUG` cannot serve: wanting a host in a deployed staging build, where defining `DEBUG`
+ * to get it would also change every `Debug.Assert` and every `#if DEBUG` somebody else wrote.
  */
 
 /**
@@ -31,7 +36,7 @@
  * matters — a thrown exception becomes "it failed" and never a reply the model does not declare.
  */
 export const DEV_HOST_SUPPORT: readonly string[] = [
-  "#if DEBUG",
+  "#if DEBUG || SEVENK_DEVHOST",
   "/// <summary>",
   "/// One delivery from a 7K Sandbox scenario.",
   "/// </summary>",
@@ -335,7 +340,7 @@ export function dispatcherFor(
   ];
 
   return [
-    "#if DEBUG",
+    "#if DEBUG || SEVENK_DEVHOST",
     "/// <summary>",
     `/// Runs <see cref="${iface}"/> inside a 7K Sandbox scenario.`,
     "/// </summary>",
@@ -354,7 +359,9 @@ export function dispatcherFor(
     "/// handler contract rather than of this host.",
     "/// </para>",
     "/// </remarks>",
-    `public sealed class ${service}DevHost : ${prefix}ISevenKServiceHost`,
+    // `partial`, like the interface beside it: wiring a handler out of a container is the obvious
+    // thing somebody will want to add, and this is a file the generator replaces wholesale.
+    `public sealed partial class ${service}DevHost : ${prefix}ISevenKServiceHost`,
     "{",
     ...indent([
       `private readonly ${iface} handler;`,

@@ -111,7 +111,11 @@ const PROJECT = `<Project Sdk="Microsoft.NET.Sdk">
 let ready = false;
 
 /** Generates with the given options and writes the files out, returning the paths. */
-const emit = async (where: string, options: Readonly<Record<string, unknown>>): Promise<string[]> => {
+const emit = async (
+  where: string,
+  options: Readonly<Record<string, unknown>>,
+  layout: "per-declaration" | "per-package" | "single" = "per-declaration",
+): Promise<string[]> => {
   const ws = buildWorkspace([{ path: "m.7k", source: MODEL }]);
   expect(ws.diagnostics.filter((d) => d.severity === "error").map((d) => d.message)).toEqual([]);
 
@@ -119,7 +123,7 @@ const emit = async (where: string, options: Readonly<Record<string, unknown>>): 
     model: ws.model,
     selected: ws.model.decls,
     names: buildNames(ws.model, []),
-    layout: "per-declaration",
+    layout,
     options: { namespace: "Acme", ...options },
     optionsFor: () => ({}),
   } as unknown as Request);
@@ -173,9 +177,10 @@ describe("the generated C#", () => {
     if (!ready) return;
     const where = join(dir, "debug");
     const paths = await emit(where, {});
-    // The host's fixed half is there, so this is a build that includes it.
+    // The fixed half beside `Problem`, and the dispatcher in a file of its own next to the interface.
     expect(paths).toContain("Acme/DevHost.cs");
-    expect(await readFile(join(where, "Acme/Flow/Desk/Desk.cs"), "utf-8")).toContain("DeskDevHost");
+    expect(paths).toContain("Acme/Flow/Desk/Desk.DevHost.cs");
+    expect(await readFile(join(where, "Acme/Flow/Desk/Desk.cs"), "utf-8")).not.toContain("DevHost");
 
     expect(problems(await build(where, "Debug"))).toEqual([]);
   }, 300_000);
@@ -192,7 +197,7 @@ describe("the generated C#", () => {
     const where = join(dir, "off");
     const paths = await emit(where, { devHost: false });
     expect(paths).not.toContain("Acme/DevHost.cs");
-    expect(await readFile(join(where, "Acme/Flow/Desk/Desk.cs"), "utf-8")).not.toContain("DevHost");
+    expect(paths).not.toContain("Acme/Flow/Desk/Desk.DevHost.cs");
 
     expect(problems(await build(where, "Debug"))).toEqual([]);
   }, 300_000);
@@ -212,13 +217,14 @@ describe("the generated C#", () => {
     if (!ready) return;
     const where = join(dir, "twice");
     await emit(where, {});
-    const text = await readFile(join(where, "Acme/Flow/Desk/Desk.cs"), "utf-8");
+    const iface = await readFile(join(where, "Acme/Flow/Desk/Desk.cs"), "utf-8");
+    const host = await readFile(join(where, "Acme/Flow/Desk/Desk.DevHost.cs"), "utf-8");
 
     // Both handlers are generated, because both subscriptions are real and both run in production.
-    expect(text).toContain("HandleWithdrawAsync(");
-    expect(text).toContain("HandleWithdrawAsSweepAsync(");
+    expect(iface).toContain("HandleWithdrawAsync(");
+    expect(iface).toContain("HandleWithdrawAsSweepAsync(");
     // One case, because a delivery carries the message and not the subscription.
-    expect(text.match(/case "flow\.desk\.Withdraw":/g)).toHaveLength(1);
+    expect(host.match(/case "flow\.desk\.Withdraw":/g)).toHaveLength(1);
 
     expect(problems(await build(where, "Debug"))).toEqual([]);
   }, 300_000);
@@ -229,9 +235,52 @@ describe("the generated C#", () => {
     // rather than written by hand or found by reflection.
     const where = join(dir, "positional");
     await emit(where, { messageType: "positional", asyncSuffix: false });
-    expect(await readFile(join(where, "Acme/Flow/Desk/Desk.cs"), "utf-8")).toContain(
+    expect(await readFile(join(where, "Acme/Flow/Desk/Desk.DevHost.cs"), "utf-8")).toContain(
       "handler.HandleSubmit(",
     );
+    expect(problems(await build(where, "Debug"))).toEqual([]);
+  }, 300_000);
+
+  /**
+   * Where the dispatcher goes, per layout.
+   *
+   * Its own file in the layouts that are already many files, and folded in under `single` — the rule
+   * the support files already follow, because a layout that promised one file and delivered two would
+   * be a layout nobody could script against.
+   */
+  it("gets a file per namespace under per-package, and builds", async () => {
+    if (!ready) return;
+    const where = join(dir, "perpackage");
+    const paths = await emit(where, {}, "per-package");
+    expect(paths).toContain("Acme.Flow.Desk.cs");
+    expect(paths).toContain("Acme.Flow.Desk.DevHost.cs");
+    expect(problems(await build(where, "Debug"))).toEqual([]);
+  }, 300_000);
+
+  it("folds into the one file under single, and builds", async () => {
+    if (!ready) return;
+    const where = join(dir, "single");
+    const paths = await emit(where, {}, "single");
+    expect(paths).toEqual(["Acme.cs"]);
+    const text = await readFile(join(where, "Acme.cs"), "utf-8");
+    expect(text).toContain("DeskDevHost");
+    expect(problems(await build(where, "Debug"))).toEqual([]);
+  }, 300_000);
+
+  it("is dropped by a glob, without anybody defining a constant", async () => {
+    if (!ready) return;
+    // The second of the three controls: the option, the file, the guard. This is the file.
+    const where = join(dir, "glob");
+    await emit(where, {});
+    await writeFile(
+      join(where, "Probe.csproj"),
+      PROJECT.replace(
+        "  </PropertyGroup>",
+        "  </PropertyGroup>\n  <ItemGroup>\n    <Compile Remove=\"**/*.DevHost.cs\" />\n  </ItemGroup>",
+      ),
+      "utf-8",
+    );
+    // Builds with the dispatchers excluded — and `DevHost.cs`, the fixed half, goes with them.
     expect(problems(await build(where, "Debug"))).toEqual([]);
   }, 300_000);
 });
