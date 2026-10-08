@@ -31,6 +31,8 @@ message Everything v1.0 @command {
   plain:     common.Plain
   // Optional, so nothing that already constructs one of these has to change.
   everyFifth: common.Step?
+  // Carried as text (7.1). Optional, so nothing that already builds one of these has to change.
+  balance:    common.Ledger?
 }
 
 message PlaceOrder v1.0 @command {

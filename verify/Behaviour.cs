@@ -234,6 +234,13 @@ static class Canonical
         // A duration is ISO 8601.
         True("a duration is ISO 8601", json.Contains("\"aDuration\":\"PT1H30M\""));
 
+        // An `int` whose declared range reaches past 2^53 travels as text (`01-kernel.md` 7.1). The
+        // digits matter: written as a JSON number this is exact in C# and rounds to ...920 the moment
+        // a JavaScript reader parses it, which is the interop the rule exists for.
+        True("a wide int is written as a string",
+            json.Contains("\"balance\":\"90071992547409921\""));
+        True("and not as a number", !json.Contains("\"balance\":90071992547409921"));
+
         // An absent optional field has its key omitted. There is no null in 7K.
         True("an absent optional field is omitted", !json.Contains("optional"));
         True("and nothing is written as null", !json.Contains("null"));
@@ -241,6 +248,8 @@ static class Canonical
         // The whole thing round-trips, compared with the generated value equality.
         var back = JsonSerializer.Deserialize<Acme.Verify.Orders.Everything>(json, options)!;
         True("it round-trips", back == everything);
+        True("and the wide int comes back to the digit",
+            back.Balance is { } b && b.Value == 90071992547409921L);
         Same("and re-serialises to the same bytes", JsonSerializer.Serialize(back, options), json);
 
         // A message with a list round-trips too, which is what the equality fix is for.
@@ -318,6 +327,9 @@ static class Canonical
             AnEnum = Acme.Verify.Common.Status.Shipped,
             Nested = new Acme.Verify.Common.Spread { Name = new Acme.Verify.Common.Line60(new Acme.Verify.Common.Line("n")) },
             Plain = new Acme.Verify.Common.Plain { Note = "p" },
+            // Past 2^53, which is what makes the encoding below worth asserting: a `long` holds it
+            // and a JSON number does not.
+            Balance = new Acme.Verify.Common.Ledger(90071992547409921L),
         };
     }
 }

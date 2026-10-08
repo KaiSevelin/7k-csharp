@@ -23,6 +23,7 @@
  * as a number — so this does too, rather than becoming the only runtime with a third answer.
  */
 
+import { intIsWide } from "@sevenk/core";
 import type { Decl, EnumIr, FieldIr, TypeIr, ValueIr } from "@sevenk/core";
 import { csharpType, namespaceOf, pascal, type TypeContext } from "./types.js";
 
@@ -305,6 +306,20 @@ export function valueConverter(decl: ValueIr, ctx: TypeContext, support: string)
   const base = csharpType(decl.base, ctx, decl.id.name);
   const kind = baseKind(decl.base);
 
+  /**
+   * Whether this `int` is carried as text.
+   *
+   * `01-kernel.md` 7.1: an `int` whose declared range can exceed ±(2^53 − 1) travels as a string,
+   * because a JSON number is a double and anything past that comes back changed. A `long` holds it
+   * exactly in memory, and `WriteNumberValue` would still emit every digit — but the reader on the
+   * other side is as likely to be JavaScript, where those digits round on the way in. The encoding
+   * is about what crosses, not about what either end can hold.
+   *
+   * The decision is 7K Core's `intIsWide`, the same function the TypeScript provider asks, so the two
+   * cannot disagree about which fields this applies to.
+   */
+  const wideInt = kind.k === "int" && intIsWide({ constraints: decl.constraints });
+
   const read = ((): string => {
     switch (kind.k) {
       case "decimal":
@@ -318,7 +333,9 @@ export function valueConverter(decl: ValueIr, ctx: TypeContext, support: string)
       case "uuid":
         return "reader.GetGuid()";
       case "int":
-        return "reader.GetInt64()";
+        // `AllowReadingFromString` is not in play here: this converter owns the read, so it takes the
+        // form the model declares and says so when it gets the other one.
+        return wideInt ? "long.Parse(reader.GetString()!, CultureInfo.InvariantCulture)" : "reader.GetInt64()";
       case "float":
         return "reader.GetDouble()";
       case "bool":
@@ -343,6 +360,9 @@ export function valueConverter(decl: ValueIr, ctx: TypeContext, support: string)
       case "duration":
         return `writer.WriteStringValue(${support}Durations.Text(value.Value))`;
       case "int":
+        return wideInt
+          ? "writer.WriteStringValue(value.Value.ToString(CultureInfo.InvariantCulture))"
+          : "writer.WriteNumberValue(value.Value)";
       case "float":
         return "writer.WriteNumberValue(value.Value)";
       case "bool":

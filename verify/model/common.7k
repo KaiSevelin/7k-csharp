@@ -24,6 +24,10 @@ value Ratio    : decimal(9,4) { range 0..1 }
 // equivalence harness noticed by having nothing to compare for it.
 value Step     : int    { range 0..100; multipleOf 5 }
 
+// Past what a JSON number carries exactly, so `01-kernel.md` 7.1 says it travels as a string. A
+// `long` holds it either way; the encoding is about what crosses to a reader that may not.
+value Ledger   : int    { range -90071992547409920..90071992547409920 }
+
 // A nominal value over a collection, whose wrapper struct would otherwise compare by reference.
 value Payload  : bytes { length 1..64 }
 
