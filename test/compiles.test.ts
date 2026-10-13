@@ -229,6 +229,39 @@ describe("the generated C#", () => {
     expect(problems(await build(where, "Debug"))).toEqual([]);
   }, 300_000);
 
+  /**
+   * The two lines the generated documentation tells a reader to write.
+   *
+   * It said `Json.Options`, and the class is `SevenKJson` — so the one line somebody copies verbatim
+   * out of the generated file did not compile, and nothing noticed because the documentation is a
+   * comment. A worked demo found it on its first build. The names in that example are the provider's
+   * own conventions, so this checks them against the output rather than against a second list.
+   */
+  it("gives a usage example whose names the output actually defines", async () => {
+    if (!ready) return;
+    const where = join(dir, "usage");
+    await emit(where, {});
+    const host = await readFile(join(where, "Acme/Flow/Desk/Desk.DevHost.cs"), "utf-8");
+
+    const example = host
+      .split(String.fromCharCode(10))
+      .map((line) => line.trim())
+      .find((line) => line.startsWith("/// await SevenKDevHost.RunAsync("));
+    expect(example).toBeDefined();
+
+    // Every type the example names, checked against what was emitted for it.
+    for (const named of ["SevenKDevHost", "DeskDevHost", "SevenKJson"]) {
+      expect(example).toContain(named);
+    }
+    const support = await readFile(join(where, "Acme/DevHost.cs"), "utf-8");
+    const json = await readFile(join(where, "Acme/Json.cs"), "utf-8");
+    expect(support).toContain("class SevenKDevHost");
+    expect(host).toContain("class DeskDevHost");
+    expect(json).toContain("class SevenKJson");
+    // And no `Json` of its own, which is what the example used to claim there was.
+    expect(json).not.toMatch(/\bclass Json\b/);
+  }, 300_000);
+
   it("builds with a positional message type and no async suffix", async () => {
     if (!ready) return;
     // Two options that move the names the dispatcher calls, which is the whole reason it is generated

@@ -355,7 +355,7 @@ export function dispatcherFor(
     `/// <c>${qname}</c> and delivers to it as it would to any live handler.`,
     "/// </para>",
     "/// <code>",
-    `/// await SevenKDevHost.RunAsync(new ${service}DevHost(new ${service}(), Json.Options), Json.Options);`,
+    `/// await SevenKDevHost.RunAsync(new ${service}DevHost(new ${service}(), SevenKJson.Options), SevenKJson.Options);`,
     "/// </code>",
     "/// <para>",
     "/// Your implementation is constructed by you, which is the point: whatever it publishes through its",
