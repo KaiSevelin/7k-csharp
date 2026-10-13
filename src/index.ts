@@ -696,6 +696,100 @@ export const csharp: Provider = {
    * what a pipe guarantees is infrastructure, and C# is not where it is configured.
    */
   emits: ["enum", "value", "record", "envelope", "message", "saga", "service"],
+  /**
+   * What the generated code holds of the model, and where it stops.
+   *
+   * Mostly `full`, because a validator is a program and a program can check what a schema language
+   * cannot — so this lists the gaps and the few exactnesses a reader would not assume. Two of the
+   * entries depend on an option (`valueTypes`, `validatorStyle`) and say which, because the honest
+   * answer is different per setting and a reader choosing a setting is exactly who asks.
+   */
+  covers: [
+    {
+      construct: "pattern",
+      fidelity: "full",
+      note: "`Regex.IsMatch` against the model's own pattern. Listed because most targets cannot.",
+    },
+    { construct: "range", fidelity: "full" },
+    { construct: "multipleOf", fidelity: "full" },
+    { construct: "length", fidelity: "full" },
+    { construct: "size", fidelity: "full" },
+    { construct: "unique", fidelity: "full" },
+    {
+      construct: "int",
+      fidelity: "full",
+      note:
+        "A `long` is exact over the whole range. Where the declared range reaches past 2^53 the " +
+        "JSON carries it as a string, which this reads and writes.",
+    },
+    {
+      construct: "invariant",
+      fidelity: "partial",
+      note:
+        "A comparison over the message's own fields becomes a check in `Validate`. One that reads " +
+        "the envelope, projects over two lists at once, or uses an operator this does not express " +
+        "is left to 7K's own checker. Under `validatorStyle attributes` an attribute decorates one " +
+        "property, so a multi-field invariant needs `both`.",
+    },
+    {
+      construct: "normalize",
+      fidelity: "none",
+      note:
+        "A validator rejects a value; it does not rewrite one. So an unnormalised value passes " +
+        "here where 7K would have normalised it. Normalise at the boundary, or compare normalised.",
+    },
+    {
+      construct: "nominal value",
+      fidelity: "partial",
+      note:
+        "Nominal under `valueTypes wrapper`, which is the default. Under `alias` it is the base " +
+        "type and C# will accept any value of it where this one belongs.",
+    },
+    {
+      construct: "value",
+      fidelity: "partial",
+      note:
+        "A collection whose element type is emitted as an alias gets no per-element validator. Set " +
+        "`valueTypes` to `wrapper` for that declaration to check them.",
+    },
+    {
+      construct: "field",
+      fidelity: "partial",
+      note:
+        "A shape beyond what the validator walks — a list inside a list, a collection inside a map " +
+        "— is typed but not checked. 7K's own checker stays authoritative for it.",
+    },
+    {
+      construct: "constraint",
+      fidelity: "partial",
+      note:
+        "Under `validatorStyle attributes`, a rule on a nominal wrapper is checked by the " +
+        "generated validator but not by ASP.NET model binding, which measures the wrapper.",
+    },
+    {
+      construct: "reacts",
+      fidelity: "partial",
+      note:
+        "Every handler is generated and runs as declared. It is the development host that dispatches " +
+        "on the message, so a second subscription to the same type cannot be told from the first " +
+        "and is not reachable from a scenario.",
+    },
+    {
+      construct: "service",
+      fidelity: "partial",
+      note:
+        "An interface, every constraint the model states as a comment, and a `TODO` for each " +
+        "decision the model does not make. No body, because `03-topology.md` 2.0 describes a " +
+        "service's interface and never its internals — there is nothing to generate one from.",
+    },
+    {
+      construct: "decimal",
+      fidelity: "none",
+      note:
+        "Refused rather than widened past what a C# `decimal` holds exactly. Under `--draft` the " +
+        "refusal is emitted as a `#error`, so the gap travels with the code.",
+    },
+  ],
   options: OPTIONS,
 
   generate(request: Request): Generated {

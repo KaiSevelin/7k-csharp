@@ -22,6 +22,16 @@ pipe guarantees. This turns the parts of that description C# can carry into code
 round-trip through a double. `bytes` is base64url unpadded, `instant` is RFC 3339 UTC, `uuid` is
 lowercase hyphenated — the canonical JSON of `01-kernel.md` §7, not whatever the serializer defaults to.
 
+## What it can express
+
+Every construct this provider handles better or worse than exactly is declared in `covers`, in
+`src/index.ts`, with a note saying what becomes of it and what to do instead. Spider shows the list
+in the provider's settings, worst first.
+
+Declared rather than written out here, because a second copy is a copy that drifts — and this one is
+checked: `test/coverage.test.ts` runs the declaration against the losses this provider reports over
+the `verify/model` fixture, so claiming to hold something it then gives up fails the suite.
+
 ## Options
 
 Set per entry in a manifest, and overridable per declaration by a rule.
